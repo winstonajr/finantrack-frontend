@@ -16,12 +16,6 @@ Este é o repositório do frontend para a aplicação FinanTrack, uma ferramenta
 
 ---
 
-## 📸 Screenshots
-
-| Página de Login | Dashboard Principal |
-| :---: | :---: |
-| ![Página de Login](https://i.imgur.com/placeholder.png) | ![Dashboard Principal](https://i.imgur.com/placeholder.png) |
-
 ## ✨ Funcionalidades Principais
 
 - **Fluxo de Autenticação Completo:** Páginas de Login e Registro com validação de formulário e feedback de erros/sucesso.
