@@ -3,11 +3,24 @@
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
+import axios from 'axios';
 import api from '@/lib/api';
 import { Transaction, Summary } from '@/types';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { EditTransactionModal } from '@/components/EditTransactionModal';
+import { SummaryCard } from '@/components/SummaryCard';
+import { TransactionList } from '@/components/TransactionList';
+import { CustomCurrencyInput } from '@/components/CurrencyInput'; // Importa o novo componente de valor
+import toast from 'react-hot-toast';
+
+// Componente para telas de Carregamento
+const LoadingScreen = ({ text = "Carregando..." }: { text?: string }) => (
+  <div className="min-h-screen flex flex-col items-center justify-center text-center">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-400 mb-4"></div>
+    <p>{text}</p>
+  </div>
+);
 
 export default function DashboardPage() {
   const { user, isLoading: isAuthLoading, logout } = useAuth();
@@ -19,7 +32,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState<string | undefined>('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [formError, setFormError] = useState<string | null>(null);
@@ -28,7 +41,6 @@ export default function DashboardPage() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  // Usando useCallback para memoizar a função fetchData
   const fetchData = useCallback(async () => {
     if (user) {
       setIsFetching(true);
@@ -40,22 +52,23 @@ export default function DashboardPage() {
         ]);
         setSummary(summaryRes.data);
         setTransactions(transactionsRes.data);
-      } catch (_err) {
-        setError('Não foi possível carregar os dados financeiros.');
+      } catch (err) {
+        let errorMessage = 'Não foi possível carregar os dados financeiros.';
+        if (axios.isAxiosError(err) && err.response) {
+          errorMessage = err.response.data.message || errorMessage;
+        }
+        setError(errorMessage);
+        toast.error(errorMessage);
       } finally {
         setIsFetching(false);
       }
     }
-  }, [user]); // A função será recriada se o 'user' mudar
+  }, [user]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]); // Agora a dependência é a função memoizada 'fetchData'
-
-  useEffect(() => {
-    if (!isAuthLoading && !user) {
-      router.push('/login');
-    }
+    if (!isAuthLoading && !user) router.push('/login');
   }, [user, isAuthLoading, router]);
 
   const handleCreateTransaction = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -63,43 +76,68 @@ export default function DashboardPage() {
     setFormError(null);
     setIsSubmitting(true);
     try {
-      const newTransaction = {
-        description,
-        amount: parseFloat(amount),
-        type,
-        date: new Date(date).toISOString(),
-      };
-      await api.post('/transactions', newTransaction);
+      const numericAmount = parseFloat(amount?.replace(/\./g, '').replace(',', '.') || '0');
+      
+      await api.post('/transactions', { description, amount: numericAmount, type, date: new Date(date).toISOString() });
+      
       setDescription('');
       setAmount('');
-      await fetchData(); // Re-busca os dados
-    } catch (_err) {
-      setFormError('Erro ao criar a transação. Tente novamente.');
+      await fetchData();
+      toast.success('Transação adicionada com sucesso!');
+    } catch (err) {
+      let errorMessage = 'Erro ao criar a transação.';
+      if (axios.isAxiosError(err) && err.response) { errorMessage = err.response.data.message || errorMessage; }
+      setFormError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDelete = async (transactionId: number) => {
-    if (window.confirm('Tem certeza que deseja apagar esta transação?')) {
-      setDeletingId(transactionId);
-      try {
-        await api.delete(`/transactions/${transactionId}`);
-        await fetchData(); // Re-busca os dados
-      } catch (_err) {
-        alert('Erro ao apagar a transação.');
-      } finally {
-        setDeletingId(null);
-      }
+  const performDelete = async (transactionId: number) => {
+    setDeletingId(transactionId);
+    try {
+      await api.delete(`/transactions/${transactionId}`);
+      await fetchData();
+      toast.success('Transação apagada com sucesso!');
+    } catch (err) {
+      let errorMessage = 'Erro ao apagar a transação.';
+      if (axios.isAxiosError(err) && err.response) { errorMessage = err.response.data.message || errorMessage; }
+      toast.error(errorMessage);
+    } finally {
+      setDeletingId(null);
     }
   };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  
+  const handleDelete = (transactionId: number) => {
+    toast((t) => (
+      <div className='flex flex-col gap-4'>
+        <p className="font-semibold">Tem certeza que deseja apagar esta transação?</p>
+        <div className="flex gap-4">
+          <Button 
+            onClick={() => {
+              toast.dismiss(t.id);
+              performDelete(transactionId);
+            }}
+            className="w-full bg-red-600 hover:bg-red-700 focus:ring-red-500"
+          >
+            Apagar
+          </Button>
+          <button 
+            onClick={() => toast.dismiss(t.id)}
+            className="w-full rounded-md bg-slate-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-700"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    ), {
+      duration: 6000,
+    });
   };
 
   if (isAuthLoading || !user) {
-    return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
+    return <LoadingScreen />;
   }
 
   return (
@@ -107,14 +145,11 @@ export default function DashboardPage() {
       <EditTransactionModal 
         transaction={editingTransaction}
         onClose={() => setEditingTransaction(null)}
-        onSuccess={() => {
-          setEditingTransaction(null);
-          fetchData(); // Re-busca os dados
-        }}
+        onSuccess={() => { setEditingTransaction(null); fetchData(); toast.success("Transação atualizada com sucesso!"); }}
       />
     
       <div className="min-h-screen p-4 sm:p-8">
-        <header className="flex justify-between items-center mb-8">
+        <header className="flex flex-wrap gap-4 justify-between items-center mb-8">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold">Olá, {user.email}!</h1>
             <p className="text-slate-400">Aqui está o resumo da sua vida financeira.</p>
@@ -123,29 +158,42 @@ export default function DashboardPage() {
         </header>
 
         <main className="space-y-8">
-          {isFetching ? ( <p className="text-center">Buscando seus dados...</p> ) : error ? ( <p className="text-red-400 text-center">{error}</p> ) : (
+          {isFetching ? ( <LoadingScreen text="Buscando seus dados..." /> ) : error ? ( <p className="text-red-400 text-center">{error}</p> ) : (
             <>
-              <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-slate-800 p-6 rounded-lg shadow-lg"><h2 className="text-slate-400 text-sm font-medium">Receitas</h2><p className="text-2xl font-semibold text-green-400">{formatCurrency(summary?.totalIncome ?? 0)}</p></div>
-                <div className="bg-slate-800 p-6 rounded-lg shadow-lg"><h2 className="text-slate-400 text-sm font-medium">Despesas</h2><p className="text-2xl font-semibold text-red-400">{formatCurrency(summary?.totalExpense ?? 0)}</p></div>
-                <div className="bg-slate-800 p-6 rounded-lg shadow-lg"><h2 className="text-slate-400 text-sm font-medium">Saldo Atual</h2><p className="text-2xl font-semibold">{formatCurrency(summary?.balance ?? 0)}</p></div>
+              <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <SummaryCard title="Receitas" icon="income" amount={summary?.totalIncome ?? 0} />
+                <SummaryCard title="Despesas" icon="expense" amount={summary?.totalExpense ?? 0} />
+                <SummaryCard title="Saldo Atual" icon="balance" amount={summary?.balance ?? 0} />
               </section>
 
               <section className="bg-slate-800 p-6 rounded-lg shadow-lg">
                 <h2 className="text-xl font-bold mb-4">Adicionar Nova Transação</h2>
-                <form onSubmit={handleCreateTransaction} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <form onSubmit={handleCreateTransaction} className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+                  
                   <div className="md:col-span-2">
-                    <label htmlFor="description" className="block text-sm font-medium text-slate-400">Descrição</label>
+                    <label htmlFor="amount" className="block text-sm font-medium text-slate-400 mb-1">Valor</label>
+                    <CustomCurrencyInput
+                      id="amount"
+                      name="amount"
+                      placeholder="R$ 0,00"
+                      value={amount}
+                      onValueChange={(value) => setAmount(value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="md:col-span-3">
+                    <label htmlFor="description" className="block text-sm font-medium text-slate-400 mb-1">Descrição</label>
                     <Input id="description" type="text" value={description} onChange={(e) => setDescription(e.target.value)} required />
                   </div>
-                  <div>
-                    <label htmlFor="amount" className="block text-sm font-medium text-slate-400">Valor</label>
-                    <Input id="amount" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+
+                  <div className="md:col-span-1">
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
+                      {isSubmitting ? '...' : 'Salvar'}
+                    </Button>
                   </div>
-                  <div>
-                    <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Adicionando...' : 'Adicionar'}</Button>
-                  </div>
-                  <div className="md:col-span-4 flex items-center gap-4 flex-wrap">
+
+                  <div className="md:col-span-6 flex items-center gap-4 flex-wrap mt-2">
                     <div className="flex items-center gap-2">
                       <input type="radio" id="expense" name="type" value="expense" checked={type === 'expense'} onChange={() => setType('expense')} className="form-radio h-4 w-4 text-red-500 bg-slate-700 border-slate-600 focus:ring-red-500" />
                       <label htmlFor="expense" className="text-sm">Despesa</label>
@@ -159,33 +207,19 @@ export default function DashboardPage() {
                       <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-auto p-1" />
                     </div>
                   </div>
-                  {formError && <p className="text-sm text-red-400 md:col-span-4">{formError}</p>}
+
+                  {formError && <p className="text-sm text-red-400 md:col-span-6">{formError}</p>}
                 </form>
               </section>
 
               <section className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                <h2 className="text-xl font-bold mb-4">Transações Recentes</h2>
-                <ul className="space-y-4">
-                  {transactions.length > 0 ? (
-                    transactions.map((tx) => (
-                      <li key={tx.id} className="flex flex-wrap justify-between items-center border-b border-slate-700 pb-2 gap-2">
-                        <div>
-                          <p className="font-semibold">{tx.description}</p>
-                          <p className="text-sm text-slate-400">{new Date(tx.date).toLocaleDateString('pt-BR')}</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <p className={`font-semibold ${tx.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>{tx.type === 'income' ? '+' : '-'} {formatCurrency(tx.amount)}</p>
-                          <div className="flex gap-2">
-                            <button onClick={() => setEditingTransaction(tx)} className="text-slate-400 hover:text-white text-sm">Editar</button>
-                            <button onClick={() => handleDelete(tx.id)} disabled={deletingId === tx.id} className="text-slate-400 hover:text-red-400 disabled:opacity-50 text-sm">{deletingId === tx.id ? 'Apagando...' : 'Apagar'}</button>
-                          </div>
-                        </div>
-                      </li>
-                    ))
-                  ) : (
-                    <p className="text-slate-400">Nenhuma transação encontrada.</p>
-                  )}
-                </ul>
+                <h2 className="text-xl font-bold mb-4">Histórico de Transações</h2>
+                <TransactionList 
+                  transactions={transactions}
+                  onEdit={setEditingTransaction}
+                  onDelete={handleDelete}
+                  deletingId={deletingId}
+                />
               </section>
             </>
           )}
