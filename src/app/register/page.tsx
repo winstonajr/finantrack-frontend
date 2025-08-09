@@ -6,6 +6,7 @@ import Link from 'next/link';
 import axios from 'axios';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
+import toast from 'react-hot-toast';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -40,7 +41,8 @@ export default function RegisterPage() {
         password,
       });
 
-      alert('Conta criada com sucesso! Você será redirecionado para a página de login.');
+      toast.success('Conta criada com sucesso! Redirecionando...');
+      
       router.push('/login');
 
     } catch (err) {
@@ -55,19 +57,21 @@ export default function RegisterPage() {
   };
 
   return (
-    // Estrutura principal idêntica à página de login para consistência
     <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-slate-900">
       <div className="absolute top-0 left-0 -translate-x-1/4 -translate-y-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl animate-pulse"></div>
       <div className="absolute bottom-0 right-0 translate-x-1/4 translate-y-1/4 w-96 h-96 bg-slate-700/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
       
       <div className="relative z-10 w-full max-w-md px-6">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-slate-50">Crie sua Conta</h1>
+          <Link href="/" className="inline-block">
+            <h1 className="text-3xl font-bold text-slate-50 transition-colors hover:text-blue-400">
+              Finan<span className="text-blue-500">Track</span>
+            </h1>
+          </Link>
           <p className="mt-2 text-slate-400">Comece a organizar suas finanças hoje mesmo.</p>
         </div>
 
         <div className="mt-8">
-          {/* Card com efeito de vidro, borda e sombra */}
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl shadow-2xl shadow-black/20">
             <div className="p-8">
               <form className="space-y-6" onSubmit={handleSubmit}>
