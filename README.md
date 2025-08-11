@@ -12,8 +12,6 @@ Este é o repositório do frontend para a aplicação FinanTrack, uma ferramenta
 
 ### 🚀 **[Acesse a Aplicação Ao Vivo](https://finantrack-alpha.vercel.app/)** 🚀
 
-*(Nota: O link acima é uma sugestão baseada no nome do projeto. Substitua pela sua URL real de deploy na Vercel)*
-
 ---
 
 ## ✨ Funcionalidades Principais
